@@ -1,16 +1,17 @@
 pipeline {
-  environment { // Declaration of environment variables
-    DOCKER_ID = "jan986" // replace this with your docker-id
+  environment {
+    DOCKER_ID = "jan986"
     DOCKER_IMAGE = "datascientestapi"
-    DOCKER_TAG = "v.${BUILD_ID}.0" // we will tag our images with the current build in order to increment the value by 1 with each new build
+    DOCKER_TAG = "v.${BUILD_ID}.0"
   }
-  agent any // Jenkins will be able to select all available agents
+  agent any
+
   stages {
-    stage('Docker Build') { // docker build image stage
+    stage('DockerBuild') {
       steps {
         script {
           sh '''
-          docker rm -f jenkins
+          docker rm -f fastapi_test || true
           docker build -t $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG .
           sleep 6
           '''
@@ -18,105 +19,55 @@ pipeline {
       }
     }
 
-    stage(' Docker run') { // run container from our built image
+    stage('DockerRun') {
       steps {
         script {
           sh '''
-          docker run -d -p 80:80 --name jenkins $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
+          docker run -d -p 80:80 --name fastapi_test $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
           sleep 10
           '''
         }
       }
     }
 
-    stage('Test Acceptance') { // we launch the curl command to validate that the container responds to the request
+    stage('TestAcceptance') {
       steps {
         script {
           sh '''
-          curl localhost
+          curl --fail --silent --show-error http://localhost || exit 1
           '''
         }
       }
     }
 
-    stage('Docker Push') { //we pass the built image to our docker hub account
+    stage('DockerPush') {
       environment {
-            DOCKER_PASS = credentials("DOCKER_HUB_PASS") // we retrieve docker password from secret text called docker_hub_pass saved on jenkins
-        }
+        DOCKER_PASS = credentials("DOCKER_HUB_PASS")
+      }
       steps {
         script {
           sh '''
-          docker login -u $DOCKER_ID -p $DOCKER_PASS
+          echo $DOCKER_PASS | docker login -u $DOCKER_ID --password-stdin
           docker push $DOCKER_ID/$DOCKER_IMAGE:$DOCKER_TAG
           '''
         }
       }
     }
 
-    stage('Deployment in dev'){
-      environment
-      {
-        KUBECONFIG = credentials("config") // we retrieve kubeconfig from secret file called config saved on jenkins
+    stage('DeploymentInDev') {
+      environment {
+        KUBECONFIG = credentials("config")
       }
       steps {
         script {
           sh '''
           rm -Rf .kube
           mkdir .kube
-          ls
-          cat $KUBECONFIG > .kube/config
+          export KUBECONFIG=$PWD/.kube/config
+          cat $KUBECONFIG > $KUBECONFIG
           cp fastapi/values.yaml values.yml
-          cat values.yml
-          sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
+          sed -i.bak "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
           helm upgrade --install app fastapi --values=values.yml --namespace dev
           '''
         }
       }
-    }
-
-    stage('Deployment in staging') {
-      environment {
-        KUBECONFIG = credentials("config") // we retrieve kubeconfig from secret file called config saved on jenkins
-      }
-      steps {
-        script {
-          sh '''
-          rm -Rf .kube
-          mkdir .kube
-          ls
-          cat $KUBECONFIG > .kube/config
-          cp fastapi/values.yaml values.yml
-          cat values.yml
-          sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-          helm upgrade --install app fastapi --values=values.yml --namespace staging
-          '''
-        }
-      }
-    }
-
-    stage('Deploiement en prod'){
-      environment {
-        KUBECONFIG = credentials("config") // we retrieve kubeconfig from secret file called config saved on jenkins
-      }
-      steps {
-      // Create an Approval Button with a timeout of 15 minutes.
-      // this requires a manual validation in order to deploy on production environment
-        timeout(time: 15, unit: "MINUTES") {
-            input message: 'Do you want to deploy in production ?', ok: 'Yes'
-        }
-        script {
-          sh '''
-          rm -Rf .kube
-          mkdir .kube
-          ls
-          cat $KUBECONFIG > .kube/config
-          cp fastapi/values.yaml values.yml
-          cat values.yml
-          sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
-          helm upgrade --install app fastapi --values=values.yml --namespace prod
-          '''
-        }
-      }
-    }
-  }
-}
