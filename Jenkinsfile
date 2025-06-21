@@ -61,10 +61,10 @@ pipeline {
       steps {
         script {
           sh '''
-          rm -Rf .kube
-          mkdir .kube
-          export KUBECONFIG=$PWD/.kube/config
-          cat $KUBECONFIG > $KUBECONFIG
+          rm -R ~/.kube
+          mkdir ~/.kube
+          cat $KUBE_CONFIG > ~/.kube/config
+          export KUBECONFIG=~/.kube/config
           cp fastapi/values.yaml values.yml
           sed -i.bak "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
           helm upgrade --install app fastapi --values=values.yml --namespace dev
