@@ -61,7 +61,7 @@ pipeline {
       steps {
         script {
           sh '''
-          rm -R ~/.kube
+          rm -Rf ~/.kube
           mkdir ~/.kube
           cat $KUBE_CONFIG > ~/.kube/config
           export KUBECONFIG=~/.kube/config
