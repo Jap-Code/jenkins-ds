@@ -61,9 +61,10 @@ pipeline {
       steps {
         script {
           sh '''
-          rm -Rf ~/.kube
-          mkdir ~/.kube
-          cat $KUBE_CONFIG > ~/.kube/config
+          rm -Rf .kube
+          mkdir .kube
+          ls
+          cat $KUBECONFIG > .kube/config
           export KUBECONFIG=~/.kube/config
           cp fastapi/values.yaml values.yml
           sed -i.bak "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
