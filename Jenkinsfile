@@ -68,5 +68,41 @@ pipeline {
         }
       }
     }
+
+    stage('Deployment in staging') {
+      environment {
+        KUBECONFIG = credentials("config") // we retrieve kubeconfig from secret file called config saved on jenkins
+      }
+      steps {
+        script {
+          sh '''
+          cp fastapi/values.yaml values.yml
+          cat values.yml
+          sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
+          helm upgrade --install app fastapi --values=values.yml --namespace staging
+          '''
+        }
+      }
+    }
+
+    stage('Deploiement en prod'){
+      environment {
+        KUBECONFIG = credentials("config") // we retrieve kubeconfig from secret file called config saved on jenkins
+      }
+      steps {
+      // Create an Approval Button with a timeout of 15 minutes.
+      // this requires a manual validation in order to deploy on production environment
+        timeout(time: 15, unit: "MINUTES") {
+            input message: 'Do you want to deploy in production ?', ok: 'Yes'
+        }
+        script {
+          sh '''
+          cat values.yml
+          sed -i "s+tag.*+tag: ${DOCKER_TAG}+g" values.yml
+          helm upgrade --install app fastapi --values=values.yml --namespace prod
+          '''
+        }
+      }
+    }
   }
 }
